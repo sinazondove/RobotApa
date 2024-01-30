@@ -1,5 +1,6 @@
 import psycopg2
 from database import add_survivor, add_survivor_resources, add_survivor_status, update_survivor_location
+from robotInfo import get_robot_information, process_robot_information
 
 def main():
     try:
@@ -62,11 +63,29 @@ def main():
 
             # Add survivor resources to Survivor_Resources table
         add_survivor_resources(conn, survivor_id, water, food, medication, ammunition)
+        robot_data = get_robot_information()
+
+        if robot_data:
+        # Process the retrieved robot information
+          flying_robots, land_robots = process_robot_information(robot_data)
+
+        # Print the sorted lists of robots
+        print("Flying Robots:")
+        for robot in flying_robots:
+            print(robot)
+
+        print("\nLand Robots:")
+        for robot in land_robots:
+            print(robot)
+        else:
+            print("Failed to retrieve robot information.")
+    
 
     except psycopg2.Error as e:
         print("Error connecting to PostgreSQL database:", e)
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     main()

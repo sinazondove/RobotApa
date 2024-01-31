@@ -81,3 +81,37 @@ def add_survivor_status(conn, survivor_id, infected):
         print("Error inserting/updating survivor status:", e)
     finally:
         cur.close()
+
+def get_infected_survivors(conn):
+    """
+    Retrieve the list of infected survivors from the database.
+    
+    Args:
+    - conn: psycopg2 connection object
+    
+    Returns:
+    - List of dictionaries representing infected survivors
+    """
+    infected_survivors = []
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, sa_id_number FROM Survivors WHERE infected = true OR infection_reports > 3")
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            survivor = {
+                "name": row[0],
+                "sa_id_number": row[1]
+            }
+            infected_survivors.append(survivor)
+        
+        return infected_survivors
+    
+    except psycopg2.Error as e:
+        print("Error retrieving infected survivors:", e)
+        return None
+    
+    finally:
+        if cursor:
+            cursor.close()

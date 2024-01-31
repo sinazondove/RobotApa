@@ -1,6 +1,7 @@
 import psycopg2
-from database import add_survivor, add_survivor_resources, add_survivor_status, update_survivor_location
-from robotInfo import get_robot_information, find_robot_location
+from database import add_survivor, add_survivor_resources, add_survivor_status, get_infected_survivors, update_survivor_location
+from robotInfo import get_robot_information
+from flask import Flask, jsonify, render_template, request
 
 def main():
     try:
@@ -8,7 +9,7 @@ def main():
             dbname="robotApocalypse",
             user="postgres",
             password="postgres",
-            host="127.0.0.1",
+            host="localhost",
             port="5432"
         )
         
@@ -81,13 +82,100 @@ def main():
             main()  # Recursively call main function to continue
         else:
             # Display list of infected survivors
-            print("List of Infected Survivors:")
+           
             # Add code to display list of infected survivors here
+            conn = psycopg2.connect(
+            dbname="robotApocalypse",
+            user="postgres",
+            password="postgres",
+            host="localhost",
+            port="5432"
+        )
+        
+        print("Are you an existing user? (yes/no):")
+        existing_user = input().lower() == "yes"
 
-    except psycopg2.Error as e:
-        print("Error connecting to PostgreSQL database:", e)
+        if existing_user:
+            # Check if survivor already exists
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM Survivors WHERE sa_id_number = %s", (sa_id_number,))
+            existing_survivor = cur.fetchone()
+            
+
+            if existing_survivor:
+                # Update survivor location
+                sql = "UPDATE Survivors SET latitude = %s, longitude = %s WHERE sa_id_number = %s"
+                cur.execute(sql, (latitude, longitude, sa_id_number))
+                print("Survivor location updated successfully.")
+        else:
+            # Displaying Robot Information logic here...
+
+
+
+
+          print("\nWould you like to continue? (yes/no):")
+        continue_option = input().lower() == "yes"
+
+        if continue_option:
+            main()  # Recursively call main function to continue
     finally:
-        conn.close()
+        conn.close()    
+
+# Sample data
+app=Flask(__name__)
+robots = [
+    {
+        "model": "09FYU",
+        "serialNumber": "Y0RIFQHMVBVTL50",
+        "manufacturedDate": "2024-02-10T09:06:08.9862851+00:00",
+        "category": "Land"
+    },
+    # Other robot objects...
+]
+
+@app.route('/')
+def display_robots():
+    formatted_robots = []
+    for robot in robots:
+        formatted_robot = {
+            "Model": robot["model"],
+            "Serial Number": robot["serialNumber"],
+            "Manufactured Date": robot["manufacturedDate"],
+            "Category": robot["category"]
+        }
+        formatted_robots.append(formatted_robot)
+
+    # Check if the client accepts HTML
+    if 'text/html' in request.headers['Accept']:
+        return render_template('robots.html', robots=formatted_robots)
+    else:
+        return jsonify(formatted_robots)
+# API endpoints
+@app.route('/add_survivor', methods=['POST'])
+def add_survivor_endpoint():
+    conn = psycopg2.connect()
+    if conn:
+        try:
+            data = request.json
+            name = data['name']
+            age = data['age']
+            gender = data['gender']
+            sa_id_number = data['sa_id_number']
+            latitude = data['latitude']
+            longitude = data['longitude']
+
+            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
+            if survivor_id:
+                return jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200
+            else:
+                return jsonify({'message': 'Failed to add survivor'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+        finally:
+            conn.close()
+    else:
+        return jsonify({'message': 'Failed to connect to the database'}), 500
+
 
 if __name__ == "__main__":
     main()

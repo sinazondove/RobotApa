@@ -1,6 +1,6 @@
 import psycopg2
 from database import add_survivor, add_survivor_resources, add_survivor_status, update_survivor_location
-from robotInfo import get_robot_information, process_robot_information
+from robotInfo import get_robot_information, find_robot_location
 
 def main():
     try:
@@ -11,7 +11,7 @@ def main():
             host="127.0.0.1",
             port="5432"
         )
-       
+        
         print("Are you an existing user? (yes/no):")
         existing_user = input().lower() == "yes"
 
@@ -30,7 +30,7 @@ def main():
                 # Update survivor location
                 update_survivor_location(conn, sa_id_number, latitude, longitude)
                 print("Survivor location updated successfully.")
-                
+
             print("Do you want to update your infection status? (yes/no):")
             update_infection_status = input().lower() == "yes"
 
@@ -38,54 +38,56 @@ def main():
                 print("Are you infected? (yes/no):")
                 infected = input().lower() == "yes"
 
-                    # Update survivor infection status
+                # Update survivor infection status
                 add_survivor_status(conn, sa_id_number, infected)
                 print("Survivor infection status updated successfully.")
+
+        else:
+            print("Displaying Robot Information:")
+            robot_data = get_robot_information()
+            if robot_data:
+                for robot in robot_data:
+                    print(f"Model: {robot['model']}, Serial Number: {robot['serialNumber']}")
             else:
-                print("Thank you for using the system.")
-            
-        print("Would you like to Add yourself as a survivor?:")
-        name = input("Name: ")
-        age = int(input("Age: "))
-        gender = input("Gender: ")
-        sa_id_number = input("SA ID number (13 digits): ")
-        latitude = float(input("Latitude: "))
-        longitude = float(input("Longitude: "))
+                print("No robot information available.")
+
+            print("\nWould you like to Add yourself as a survivor?:")
+            name = input("Name: ")
+            age = int(input("Age: "))
+            gender = input("Gender: ")
+            sa_id_number = input("SA ID number (13 digits): ")
+            latitude = float(input("Latitude: "))
+            longitude = float(input("Longitude: "))
 
             # Add survivor to Survivors table
-        survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
+            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
 
             # Prompt user to enter survivor resources
-        water = int(input("Water: "))
-        food = int(input("Food: "))
-        medication = int(input("Medication: "))
-        ammunition = int(input("Ammunition: "))
+            water = int(input("Water: "))
+            food = int(input("Food: "))
+            medication = int(input("Medication: "))
+            ammunition = int(input("Ammunition: "))
 
             # Add survivor resources to Survivor_Resources table
-        add_survivor_resources(conn, survivor_id, water, food, medication, ammunition)
-        robot_data = get_robot_information()
+            add_survivor_resources(conn, survivor_id, water, food, medication, ammunition)
 
-        if robot_data:
-        # Process the retrieved robot information
-          flying_robots, land_robots = process_robot_information(robot_data)
+            print("Survivor added successfully with ID:", survivor_id)
+            print("Survivor resources added successfully.")
 
-        # Print the sorted lists of robots
-        print("Flying Robots:")
-        for robot in flying_robots:
-            print(robot)
+        print("\nWould you like to continue? (yes/no):")
+        continue_option = input().lower() == "yes"
 
-        print("\nLand Robots:")
-        for robot in land_robots:
-            print(robot)
+        if continue_option:
+            main()  # Recursively call main function to continue
         else:
-            print("Failed to retrieve robot information.")
-    
+            # Display list of infected survivors
+            print("List of Infected Survivors:")
+            # Add code to display list of infected survivors here
 
     except psycopg2.Error as e:
         print("Error connecting to PostgreSQL database:", e)
     finally:
         conn.close()
-
 
 if __name__ == "__main__":
     main()

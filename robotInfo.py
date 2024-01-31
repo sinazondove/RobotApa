@@ -1,3 +1,4 @@
+# Function to retrieve robot information
 import requests
 
 
@@ -15,23 +16,24 @@ def get_robot_information():
     except Exception as e:
         print("Error:", e)
         return None
-def process_robot_information(robot_data):
+
+# Function to find robot location based on model and serial number
+def find_robot_location(model, serial_number):
+    robot_data = get_robot_information()
+
     if robot_data:
-        flying_robots = []
-        land_robots = []
-
         for robot in robot_data:
-            category = robot["category"]
-
-            if category == "Flying":
-                flying_robots.append(robot)
-            elif category == "Land":
-                land_robots.append(robot)
-
-        # Sort the lists of robots based on their manufacturedDate
-        flying_robots.sort(key=lambda x: x["manufacturedDate"])
-        land_robots.sort(key=lambda x: x["manufacturedDate"])
-
-        return flying_robots, land_robots
+            if robot["model"] == model and robot["serialNumber"] == serial_number:
+                # Extract latitude and longitude from the model and serial number
+                latitude = float(model[:2] + '.' + model[2:4])
+                longitude = float(serial_number[:2] + '.' + serial_number[2:4])
+                return {"latitude": latitude, "longitude": longitude}
+        
+        # If the robot with the specified model and serial number is not found
+        return "Robot not found"
     else:
-        return None, None
+        return "Failed to retrieve robot information"
+def display_robot_list(robot_data):
+    print("List of Robots:")
+    for robot in robot_data:
+        print(f"Model: {robot['model']}, Serial Number: {robot['serialNumber']}")

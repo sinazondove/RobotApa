@@ -1,117 +1,129 @@
 import psycopg2
 
-def add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude):
+def add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude, infected):
     cur = conn.cursor()
-    try:
-        sql = "INSERT INTO Survivors (name, age, gender, sa_id_number, latitude, longitude) VALUES (%s, %s, %s, %s, %s, %s) RETURNING survivor_id"
-        cur.execute(sql, (name, age, gender, sa_id_number, latitude, longitude))
-        survivor_id = cur.fetchone()[0]
-        conn.commit()
-        print("Survivor added successfully with ID:", survivor_id)
-        return survivor_id
-    except psycopg2.Error as e:
-        conn.rollback()
-        print("Error inserting survivor:", e)
-    finally:
-        cur.close()
-def update_survivor_location(conn, sa_id_number, latitude, longitude):
-    cur = conn.cursor()
-    try:
-        # Check if survivor with given SA ID number exists
-        cur.execute("SELECT * FROM Survivors WHERE sa_id_number = %s", (sa_id_number,))
-        existing_survivor = cur.fetchone()
-
-        if existing_survivor:
-            # Update survivor location
-            sql = "UPDATE Survivors SET latitude = %s, longitude = %s WHERE sa_id_number = %s"
-            cur.execute(sql, (latitude, longitude, sa_id_number))
-            conn.commit()
-            print("Survivor location updated successfully.")
-        else:
-            print("Survivor with SA ID number {} not found.".format(sa_id_number))
-
-    except psycopg2.Error as e:
-        conn.rollback()
-        print("Error updating survivor location:", e)
-    finally:
-        cur.close()
-
+    cur.execute("""
+        INSERT INTO Survivors (name, age, gender, sa_id_number, latitude, longitude, infection_status)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING survivor_id
+    """, (name, age, gender, sa_id_number, latitude, longitude, infected))
+    survivor_id = cur.fetchone()[0]
+    conn.commit()
+    cur.close()
+    return survivor_id
 
 def add_survivor_resources(conn, survivor_id, water, food, medication, ammunition):
     cur = conn.cursor()
-    try:
-        sql = "INSERT INTO Survivor_Resources (survivor_id, water, food, medication, ammunition) VALUES (%s, %s, %s, %s, %s)"
-        cur.execute(sql, (survivor_id, water, food, medication, ammunition))
-        conn.commit()
-        print("Survivor resources added successfully.")
-    except psycopg2.Error as e:
-        conn.rollback()
-        print("Error inserting survivor resources:", e)
-    finally:
-        cur.close()
+    cur.execute("""
+        INSERT INTO Survivor_Resources (survivor_id, water, food, medication, ammunition)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (survivor_id, water, food, medication, ammunition))
+    conn.commit()
+    cur.close()
 
-def add_survivor_status(conn, survivor_id, infected):
+def update_survivor_location(conn, sa_id_number, latitude, longitude):
     cur = conn.cursor()
-    try:
-        # Check if survivor status already exists
-        cur.execute("SELECT * FROM Survivor_Status WHERE survivor_id = %s", (survivor_id,))
-        existing_status = cur.fetchone()
+    cur.execute("""
+        UPDATE Survivors
+        SET latitude = %s, longitude = %s
+        WHERE sa_id_number = %s
+    """, (latitude, longitude, sa_id_number))
+    conn.commit()
+    cur.close()
+    
+def add_survivor_status(conn, sa_id_number, infected):
+    cur = conn.cursor()
 
-        if existing_status:
-            # Survivor status exists, update times_reported_infected
-            times_reported_infected = existing_status[2] + 1 if infected else existing_status[2]
-            cur.execute("UPDATE Survivor_Status SET times_reported_infected = %s WHERE survivor_id = %s", (times_reported_infected, survivor_id))
-            print("Survivor status updated: Infected (times reported infected: {})".format(times_reported_infected))
-            
-            # Check if reported by more than 3 users and update status to "infected"
-            if times_reported_infected >= 3:
-                cur.execute("UPDATE Survivor_Status SET infected = TRUE WHERE survivor_id = %s", (survivor_id,))
-                print("Survivor status updated to infected.")
-            else:
-                print("Survivor status remains unchanged.")
-        else:
-            # Survivor status does not exist, insert new record
-            times_reported_infected = 1 if infected else 0
-            cur.execute("INSERT INTO Survivor_Status (survivor_id, infected, times_reported_infected) VALUES (%s, %s, %s)", (survivor_id, infected, times_reported_infected))
-            print("Survivor status added successfully.")
+    # Check if the survivor already exists in the database
+    cur.execute("SELECT * FROM Survivors WHERE sa_id_number = %s", (sa_id_number,))
+    existing_survivor = cur.fetchone()
 
+    if existing_survivor:
+        # Update the infection status in the Survivors table
+        cur.execute("UPDATE Survivors SET infection_status = %s WHERE sa_id_number = %s", (infected, sa_id_number))
         conn.commit()
+        cur.close()
+        return True
+
+    cur.close()
+    return False
+
+def validate_sa_id(conn, sa_id_number):
+    """
+    Validate the SA ID number format.
+    """
+    if len(sa_id_number) != 13:
+        return False
+
+    # Check if SA ID number contains only digits
+    if not sa_id_number.isdigit():
+        return False
+    # Check if SA ID number is 13 digits long
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM Survivors WHERE sa_id_number = %s", (sa_id_number,))
+        count = cur.fetchone()[0]
+        return count > 0
     except psycopg2.Error as e:
-        conn.rollback()
-        print("Error inserting/updating survivor status:", e)
+        print("Error validating SA ID number:", e)
+        return False
     finally:
         cur.close()
+
+def get_non_infected_survivors(conn):
+    """
+    Retrieve a list of survivors that are not infected from the survivor table.
+
+    Args:
+    - conn: psycopg2 connection object
+
+    Returns:
+    - A list of non-infected survivors (as dictionaries) if successful, or
+    - None if an error occurs.
+    """
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM Survivors WHERE infection_status = false")
+        non_infected_survivors = cur.fetchall()
+        return non_infected_survivors
+    except psycopg2.Error as e:
+        print("Error fetching non-infected survivors:", e)
+        return None
+    finally:
+        if cur:
+            cur.close()
 
 def get_infected_survivors(conn):
     """
-    Retrieve the list of infected survivors from the database.
-    
+    Retrieve a list of survivors who are infected from the survivor table.
+
     Args:
     - conn: psycopg2 connection object
-    
+
     Returns:
-    - List of dictionaries representing infected survivors
-    """
-    infected_survivors = []
-    
+    - A list of infected survivors (as dictionaries) if successful, or
+    - None if an error occurs.  """
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, sa_id_number FROM Survivors WHERE infected = true OR infection_reports > 3")
-        rows = cursor.fetchall()
-        
-        for row in rows:
-            survivor = {
-                "name": row[0],
-                "sa_id_number": row[1]
-            }
-            infected_survivors.append(survivor)
-        
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM Survivors WHERE infection_status = true")
+        infected_survivors = cur.fetchall()
         return infected_survivors
-    
     except psycopg2.Error as e:
-        print("Error retrieving infected survivors:", e)
+        print("Error fetching infected survivors:", e)
         return None
-    
     finally:
-        if cursor:
-            cursor.close()
+        if cur:
+            cur.close()
+
+def display_existing_survivors(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM Survivors")
+    existing_survivors = cur.fetchall()
+    cur.close()
+
+    if existing_survivors:
+        for survivor in existing_survivors:
+            print("ID:", survivor[0], "Name:", survivor[1], "Age:", survivor[2], "Gender:", survivor[3], "SA ID:", survivor[4])
+    else:
+        print("No existing survivors.")
+

@@ -127,3 +127,8 @@ def display_existing_survivors(conn):
     else:
         print("No existing survivors.")
 
+
+def calculate_percentage(survivor_count, total_count):
+    if total_count == 0:
+        return 0
+    return (survivor_count / total_count) * 100

@@ -1,5 +1,5 @@
 import psycopg2
-from database import add_survivor, add_survivor_resources, add_survivor_status, get_infected_survivors, get_non_infected_survivors, update_survivor_location, validate_sa_id
+from database import add_survivor, add_survivor_resources, add_survivor_status, calculate_percentage, get_infected_survivors, get_non_infected_survivors, update_survivor_location, validate_sa_id
 from robotInfo import get_robot_information
 from flask import Flask, jsonify, render_template, request
 
@@ -80,11 +80,25 @@ def main():
                 print(survivor)  # Print each non-infected survivor's details
         else:
             print("No non-infected survivors.")
+            infected_survivors = get_infected_survivors(conn)
+        non_infected_survivors = get_non_infected_survivors(conn)
+        total_survivors = len(infected_survivors) + len(non_infected_survivors)
+
+        infected_survivors_count = len(infected_survivors)
+        non_infected_survivors_count = len(non_infected_survivors)
+
+        percentage_infected = calculate_percentage(infected_survivors_count, total_survivors)
+        percentage_non_infected = calculate_percentage(non_infected_survivors_count, total_survivors)
+
+        print("Percentage of Infected Survivors:", percentage_infected)
+        print("Percentage of Non-Infected Survivors:", percentage_non_infected)
+
 
         print("\nWould you like to continue? (yes/no):")
         continue_option = input().lower() == "yes"
         if not continue_option:
             break
+        
 
     conn.close()
     

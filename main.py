@@ -133,5 +133,31 @@ def display_robots():
     else:
         return jsonify(formatted_robots)
 
+# API endpoints
+@app.route('/add_survivor', methods=['POST'])
+def add_survivor_endpoint():
+    conn = psycopg2.connect()
+    if conn:
+        try:
+            data = request.json
+            name = data['name']
+            age = data['age']
+            gender = data['gender']
+            sa_id_number = data['sa_id_number']
+            latitude = data['latitude']
+            longitude = data['longitude']
+
+            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
+            if survivor_id:
+                return jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200
+            else:
+                return jsonify({'message': 'Failed to add survivor'}), 400
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+        finally:
+            conn.close()
+    else:
+        return jsonify({'message': 'Failed to connect to the database'}), 500
+
 if __name__ == "__main__":
     main()

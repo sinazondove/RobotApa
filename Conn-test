@@ -1,0 +1,20 @@
+import unittest
+import psycopg2
+
+class TestDatabaseConnection(unittest.TestCase):
+    def test_database_connection(self):
+        try:
+            conn = psycopg2.connect(
+                dbname="robotApocalypse",
+                user="postgres",
+                password="postgres",
+                host="localhost",
+                port="5432"
+            )
+            self.assertTrue(conn is not None)
+            conn.close()
+        except psycopg2.OperationalError as e:
+            self.fail(f"Failed to connect to database: {e}")
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,3 +1,4 @@
+from flask import app, jsonify, request
 import psycopg2
 
 def add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude, infected):
@@ -132,3 +133,24 @@ def calculate_percentage(survivor_count, total_count):
     if total_count == 0:
         return 0
     return (survivor_count / total_count) * 100
+
+
+# API endpoints
+@app.route('/add_survivor', methods=['POST'])
+def add_survivor_endpoint():
+    conn = psycopg2.connect()
+    if conn:
+        try:
+            
+            data = request.json
+            name = data['name']
+            age = data['age']
+            gender = data['gender']
+            sa_id_number = data['sa_id_number']
+            latitude = data['latitude']
+            longitude = data['longitude']
+
+            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
+            if survivor_id:
+                return jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200
+        finally: conn.close()    

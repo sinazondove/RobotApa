@@ -1,7 +1,7 @@
 import psycopg2
-from database import add_survivor, add_survivor_resources, add_survivor_status, calculate_percentage, get_infected_survivors, get_non_infected_survivors, update_survivor_location, validate_sa_id
+from database import add_survivor, add_survivor_status, calculate_percentage, get_infected_survivors, get_non_infected_survivors, update_survivor_location, validate_sa_id
 from robotInfo import get_robot_information
-from flask import Flask, jsonify, render_template, request
+
 
 def main():
     conn = psycopg2.connect(
@@ -101,63 +101,8 @@ def main():
         
 
     conn.close()
+
     
-
-# Sample data
-app = Flask(__name__)
-robots = [
-    {
-        "model": "09FYU",
-        "serialNumber": "Y0RIFQHMVBVTL50",
-        "manufacturedDate": "2024-02-10T09:06:08.9862851+00:00",
-        "category": "Land"
-    },
-    # Other robot objects...
-]
-
-@app.route('/')
-def display_robots():
-    formatted_robots = []
-    for robot in robots:
-        formatted_robot = {
-            "Model": robot["model"],
-            "Serial Number": robot["serialNumber"],
-            "Manufactured Date": robot["manufacturedDate"],
-            "Category": robot["category"]
-        }
-        formatted_robots.append(formatted_robot)
-
-    # Check if the client accepts HTML
-    if 'text/html' in request.headers['Accept']:
-        return render_template('robots.html', robots=formatted_robots)
-    else:
-        return jsonify(formatted_robots)
-
-# API endpoints
-@app.route('/add_survivor', methods=['POST'])
-def add_survivor_endpoint():
-    conn = psycopg2.connect()
-    if conn:
-        try:
-            data = request.json
-            name = data['name']
-            age = data['age']
-            gender = data['gender']
-            sa_id_number = data['sa_id_number']
-            latitude = data['latitude']
-            longitude = data['longitude']
-
-            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
-            if survivor_id:
-                return jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200
-            else:
-                return jsonify({'message': 'Failed to add survivor'}), 400
-        except Exception as e:
-            return jsonify({'error': str(e)}), 400
-        finally:
-            conn.close()
-    else:
-        return jsonify({'message': 'Failed to connect to the database'}), 500
 
 if __name__ == "__main__":
     main()

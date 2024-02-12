@@ -17,4 +17,4 @@ class TestDatabaseConnection(unittest.TestCase):
             self.fail(f"Failed to connect to database: {e}")
 
 if __name__ == '__main__':
-    unittest.main(TestDatabaseConnection)
+    unittest.main()

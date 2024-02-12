@@ -1,13 +1,13 @@
 from flask import app, jsonify, request
 import psycopg2
 
-def add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude, infected):
+def add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude, infection_status):
     cur = conn.cursor()
     cur.execute("""
         INSERT INTO Survivors (name, age, gender, sa_id_number, latitude, longitude, infection_status)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING survivor_id
-    """, (name, age, gender, sa_id_number, latitude, longitude, infected))
+    """, (name, age, gender, sa_id_number, latitude, longitude, infection_status))
     survivor_id = cur.fetchone()[0]
     conn.commit()
     cur.close()
@@ -135,22 +135,3 @@ def calculate_percentage(survivor_count, total_count):
     return (survivor_count / total_count) * 100
 
 
-# API endpoints
-@app.route('/add_survivor', methods=['POST'])
-def add_survivor_endpoint():
-    conn = psycopg2.connect()
-    if conn:
-        try:
-            
-            data = request.json
-            name = data['name']
-            age = data['age']
-            gender = data['gender']
-            sa_id_number = data['sa_id_number']
-            latitude = data['latitude']
-            longitude = data['longitude']
-
-            survivor_id = add_survivor(conn, name, age, gender, sa_id_number, latitude, longitude)
-            if survivor_id:
-                return jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200
-        finally: conn.close()    

@@ -38,11 +38,11 @@ def display_robots():
     else:
         return jsonify(formatted_robots)
 
-def add_survivor(conn, survivor_id, name, age, gender, sa_id_number, latitude, longitude, infected):
+def add_survivor(conn, survivor_id, name, age, gender, sa_id_number, latitude, longitude, infection_status):
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO survivors (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infected) VALUES (%s,%s, %s, %s, %s, %s, %s, %s) RETURNING survivor_id",
-                       (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infected))
+        cursor.execute("INSERT INTO survivors (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infection_status) VALUES (%s,%s, %s, %s, %s, %s, %s, %s) RETURNING survivor_id",
+                       (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infection_status))
         survivor_id = cursor.fetchone()[0]
         conn.commit()
         return survivor_id
@@ -68,9 +68,9 @@ def add_survivor_endpoint():
         sa_id_number = data['sa_id_number']
         latitude = data['latitude']
         longitude = data['longitude']
-        infected = data['infected']
+        infection_status= data['infected']
 
-        survivor_id = add_survivor( conn,survivor_id, name, age, gender, sa_id_number, latitude, longitude, infected)
+        survivor_id = add_survivor( conn,survivor_id, name, age, gender, sa_id_number, latitude, longitude, infection_status)
         conn.close()  # Close connection after successful database operation
         return make_response(jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200)
     except Exception as e:
@@ -139,35 +139,59 @@ def update_location_endpoint(survivor_id):
             return make_response(jsonify({'message': 'Failed to connect to the database'}), 500)
     except Exception as e:
         return make_response(jsonify({'error': str(e)}), 400)
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
 def flag_survivor_as_infected(conn, survivor_id):
     try:
         cursor = conn.cursor()
-        
+      
+
         # Check the number of times infection status reported for the survivor
-        cursor.execute("""
-            SELECT COUNT(*) FROM survivors
+        if conn:
+            # Log the SQL query before execution
+            query = ("""SELECT COUNT(*) FROM infection_reports
             WHERE survivor_id = %s AND infection_status = true
-        """, (survivor_id,))
+            """, (survivor_id,))
+            logging.debug("Executing SQL query: %s", query)
         
-        infection_reports_count = cursor.fetchone()[0]
         
+            # Execute the query with parameters
+            infection_reports_count = cursor.fetchone()[0]
+            cursor.execute(query, (infection_reports_count,survivor_id))
+
+            # Commit the transaction
+            conn.commit()
+
+            logging.info(f"Infection status updated successfully for survivor with ID {survivor_id}")
+   
         if infection_reports_count >= 3:
-            # Update survivor's status as infected
+            # Update survivor's status as infected in the survivors table
             cursor.execute("""
                 UPDATE survivors
                 SET infected = true
                 WHERE survivor_id = %s
             """, (survivor_id,))
-            
+
+            # Insert a record into the infection_reports table
+            cursor.execute("""
+                INSERT INTO infection_reports (survivor_id, infection_status)
+                VALUES (%s, true)
+            """, (survivor_id,))
+
             conn.commit()
-            
+
+            logging.info(f"Survivor with ID {survivor_id} flagged as infected")
             return True  # Survivor flagged as infected
         else:
+            logging.debug(f"Survivor with ID {survivor_id} not flagged as infected")
             return False  # Survivor not flagged as infected
-        
-    except psycopg2.Error as e:
+    except (Exception, psycopg2.DatabaseError) as error:
+        logging.error("Error while updating survivor's infection status:", error)
+        logging.debug(f"Infection reports count for survivor {survivor_id}: {infection_reports_count}")
         conn.rollback()
-        raise e
+        logging.error(f"Error while flagging survivor {survivor_id} as infected: {error}")
+        raise error
     finally:
         cursor.close()
 
@@ -183,13 +207,14 @@ def flag_infected_endpoint(survivor_id):
         )
         
         if flag_survivor_as_infected(conn, survivor_id):
-            return jsonify({'message': 'Survivor flagged as infected'}), 200
+            return make_response(jsonify({'message': 'Survivor not flagged as infected'}), 200)
         else:
-            return jsonify({'message': 'Survivor not flagged as infected'}), 200
-            
+            return make_response(jsonify({'message': 'Survivor flagged as infected'}), 201)
+        
     except psycopg2.Error as e:
         return jsonify({'error': str(e)}), 500
     finally:
         conn.close()
+
 if __name__ == '__main__':
     app.run(debug=True)

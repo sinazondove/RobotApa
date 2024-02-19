@@ -1,15 +1,18 @@
     
 
 # Sample data
-import datetime
-import time
+
+from sqlalchemy import Double, Time
+from sqlalchemy import create_engine, Column, Integer, String, ForeignKey, Boolean, Time, Float
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 from flask import Flask, jsonify, make_response, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 import psycopg2
 import logging
 from database import add_survivor
 import psycopg2
-from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy import ForeignKey, create_engine, Column, Integer, String, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -147,6 +150,7 @@ def update_location_endpoint(survivor_id):
         return make_response(jsonify({'error': str(e)}), 400)
 
 
+
 # Define SQLAlchemy database connection
 # Replace 'your_postgres_username', 'your_postgres_password', 'your_postgres_host', and 'your_postgres_database' with your PostgreSQL credentials
 DATABASE_URL = 'postgresql://postgres:postgres@localhost/robotApocalypse'
@@ -160,18 +164,27 @@ class Survivor(Base):
     __tablename__ = 'survivors'
     survivor_id = Column(Integer, primary_key=True)
     name = Column(String)
+    age = Column(Integer)
+    gender = Column(String)
+    sa_id_number = Column(String)
+    latitude = Column(Float)
+    longitude = Column(Float)
     infection_status = Column(Boolean, default=False)
 
 class InfectionReport(Base):
     __tablename__ = 'infection_reports'
-    survivor_id = Column(Integer, primary_key=True)
-    survivor_id = Column(Integer, nullable=False)
+    report_id = Column(Integer, primary_key=True)
+    survivor_id = Column(Integer, ForeignKey('survivors.survivor_id'))
+    infection_status = Column(Boolean, default=False)
+    reported_at = Column(Time)
+
+app = Flask(__name__)
 
 # Define endpoint to update infection status and add infection report
 @app.route('/update_infection_status/<int:survivor_id>', methods=['POST'])
 def update_infection_status(survivor_id):
     # Check if survivor exists
-    survivor = session.query(Survivor).filter_by(id=survivor_id).first()
+    survivor = session.query(Survivor).filter_by(survivor_id=survivor_id).first()
     if not survivor:
         return jsonify({'error': 'Survivor not found'}), 404
     
@@ -187,6 +200,8 @@ def update_infection_status(survivor_id):
     else:
         return jsonify({'message': 'Infection status not updated'}), 200
 
+if __name__ == '__main__':
+    app.run(debug=True)
 # Run Flask application
 if __name__ == '__main__':
     Base.metadata.create_all(engine)

@@ -1,13 +1,17 @@
     
 
 # Sample data
+import datetime
+import time
 from flask import Flask, jsonify, make_response, render_template, request
+from flask_sqlalchemy import SQLAlchemy
 import psycopg2
 import logging
 from database import add_survivor
 import psycopg2
-from psycopg2 import Error
-
+from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
 robots = [
@@ -38,11 +42,11 @@ def display_robots():
     else:
         return jsonify(formatted_robots)
 
-def add_survivor(conn, survivor_id, name, age, gender, sa_id_number, latitude, longitude, infected):
+def add_survivor(conn, survivor_id, name, age, gender, sa_id_number, latitude, longitude, infection_status):
     try:
         cursor = conn.cursor()
-        cursor.execute("INSERT INTO survivors (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infected) VALUES (%s,%s, %s, %s, %s, %s, %s, %s) RETURNING survivor_id",
-                       (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infected))
+        cursor.execute("INSERT INTO survivors (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infection_status) VALUES (%s,%s, %s, %s, %s, %s, %s, %s) RETURNING survivor_id",
+                       (survivor_id,name, age, gender, sa_id_number, latitude, longitude, infection_status))
         survivor_id = cursor.fetchone()[0]
         conn.commit()
         return survivor_id
@@ -68,9 +72,9 @@ def add_survivor_endpoint():
         sa_id_number = data['sa_id_number']
         latitude = data['latitude']
         longitude = data['longitude']
-        infected = data['infected']
+        infection_status= data['infected']
 
-        survivor_id = add_survivor( conn,survivor_id, name, age, gender, sa_id_number, latitude, longitude, infected)
+        survivor_id = add_survivor( conn,survivor_id, name, age, gender, sa_id_number, latitude, longitude, infection_status)
         conn.close()  # Close connection after successful database operation
         return make_response(jsonify({'message': 'Survivor added successfully', 'survivor_id': survivor_id}), 200)
     except Exception as e:
@@ -111,6 +115,8 @@ def update_survivor_location(conn, survivor_id, new_latitude, new_longitude):
     # Close cursor
     cursor.close()
 
+
+
 @app.route('/update_location/<int:survivor_id>', methods=['POST'])
 def update_location_endpoint(survivor_id):
     try:
@@ -139,57 +145,49 @@ def update_location_endpoint(survivor_id):
             return make_response(jsonify({'message': 'Failed to connect to the database'}), 500)
     except Exception as e:
         return make_response(jsonify({'error': str(e)}), 400)
-def flag_survivor_as_infected(conn, survivor_id):
-    try:
-        cursor = conn.cursor()
-        
-        # Check the number of times infection status reported for the survivor
-        cursor.execute("""
-            SELECT COUNT(*) FROM survivors
-            WHERE survivor_id = %s AND infection_status = true
-        """, (survivor_id,))
-        
-        infection_reports_count = cursor.fetchone()[0]
-        
-        if infection_reports_count >= 3:
-            # Update survivor's status as infected
-            cursor.execute("""
-                UPDATE survivors
-                SET infected = true
-                WHERE survivor_id = %s
-            """, (survivor_id,))
-            
-            conn.commit()
-            
-            return True  # Survivor flagged as infected
-        else:
-            return False  # Survivor not flagged as infected
-        
-    except psycopg2.Error as e:
-        conn.rollback()
-        raise e
-    finally:
-        cursor.close()
 
-@app.route('/flag_infected/<int:survivor_id>', methods=['POST'])
-def flag_infected_endpoint(survivor_id):
-    try:
-        conn = psycopg2.connect(
-            dbname="robotApocalypse",
-            user="postgres",
-            password="postgres",
-            host="localhost",
-            port="5432"
-        )
-        
-        if flag_survivor_as_infected(conn, survivor_id):
-            return jsonify({'message': 'Survivor flagged as infected'}), 200
-        else:
-            return jsonify({'message': 'Survivor not flagged as infected'}), 200
-            
-    except psycopg2.Error as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
+
+# Define SQLAlchemy database connection
+# Replace 'your_postgres_username', 'your_postgres_password', 'your_postgres_host', and 'your_postgres_database' with your PostgreSQL credentials
+DATABASE_URL = 'postgresql://postgres:postgres@localhost/robotApocalypse'
+engine = create_engine(DATABASE_URL)
+Base = declarative_base()
+Session = sessionmaker(bind=engine)
+session = Session()
+
+# Define SQLAlchemy models
+class Survivor(Base):
+    __tablename__ = 'survivors'
+    survivor_id = Column(Integer, primary_key=True)
+    name = Column(String)
+    infection_status = Column(Boolean, default=False)
+
+class InfectionReport(Base):
+    __tablename__ = 'infection_reports'
+    survivor_id = Column(Integer, primary_key=True)
+    survivor_id = Column(Integer, nullable=False)
+
+# Define endpoint to update infection status and add infection report
+@app.route('/update_infection_status/<int:survivor_id>', methods=['POST'])
+def update_infection_status(survivor_id):
+    # Check if survivor exists
+    survivor = session.query(Survivor).filter_by(id=survivor_id).first()
+    if not survivor:
+        return jsonify({'error': 'Survivor not found'}), 404
+    
+    # Get number of infection reports for the survivor
+    num_reports = session.query(InfectionReport).filter_by(survivor_id=survivor_id).count()
+    
+    # Update infection status and add infection report if necessary
+    if num_reports >= 3:
+        survivor.infection_status = True
+        session.add(InfectionReport(survivor_id=survivor_id))
+        session.commit()
+        return jsonify({'message': 'Infection status updated and infection report added'}), 200
+    else:
+        return jsonify({'message': 'Infection status not updated'}), 200
+
+# Run Flask application
 if __name__ == '__main__':
+    Base.metadata.create_all(engine)
     app.run(debug=True)

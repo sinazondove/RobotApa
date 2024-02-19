@@ -1,13 +1,17 @@
     
 
 # Sample data
+import datetime
+import time
 from flask import Flask, jsonify, make_response, render_template, request
+from flask_sqlalchemy import SQLAlchemy
 import psycopg2
 import logging
 from database import add_survivor
 import psycopg2
-from psycopg2 import Error
-
+from sqlalchemy import create_engine, Column, Integer, String, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 app = Flask(__name__)
 robots = [
@@ -111,6 +115,8 @@ def update_survivor_location(conn, survivor_id, new_latitude, new_longitude):
     # Close cursor
     cursor.close()
 
+
+
 @app.route('/update_location/<int:survivor_id>', methods=['POST'])
 def update_location_endpoint(survivor_id):
     try:
@@ -139,82 +145,49 @@ def update_location_endpoint(survivor_id):
             return make_response(jsonify({'message': 'Failed to connect to the database'}), 500)
     except Exception as e:
         return make_response(jsonify({'error': str(e)}), 400)
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
 
-def flag_survivor_as_infected(conn, survivor_id):
-    try:
-        cursor = conn.cursor()
-      
 
-        # Check the number of times infection status reported for the survivor
-        if conn:
-            # Log the SQL query before execution
-            query = ("""SELECT COUNT(*) FROM infection_reports
-            WHERE survivor_id = %s AND infection_status = true
-            """, (survivor_id,))
-            logging.debug("Executing SQL query: %s", query)
-        
-        
-            # Execute the query with parameters
-            infection_reports_count = cursor.fetchone()[0]
-            cursor.execute(query, (infection_reports_count,survivor_id))
+# Define SQLAlchemy database connection
+# Replace 'your_postgres_username', 'your_postgres_password', 'your_postgres_host', and 'your_postgres_database' with your PostgreSQL credentials
+DATABASE_URL = 'postgresql://postgres:postgres@localhost/robotApocalypse'
+engine = create_engine(DATABASE_URL)
+Base = declarative_base()
+Session = sessionmaker(bind=engine)
+session = Session()
 
-            # Commit the transaction
-            conn.commit()
+# Define SQLAlchemy models
+class Survivor(Base):
+    __tablename__ = 'survivors'
+    survivor_id = Column(Integer, primary_key=True)
+    name = Column(String)
+    infection_status = Column(Boolean, default=False)
 
-            logging.info(f"Infection status updated successfully for survivor with ID {survivor_id}")
-   
-        if infection_reports_count >= 3:
-            # Update survivor's status as infected in the survivors table
-            cursor.execute("""
-                UPDATE survivors
-                SET infected = true
-                WHERE survivor_id = %s
-            """, (survivor_id,))
+class InfectionReport(Base):
+    __tablename__ = 'infection_reports'
+    survivor_id = Column(Integer, primary_key=True)
+    survivor_id = Column(Integer, nullable=False)
 
-            # Insert a record into the infection_reports table
-            cursor.execute("""
-                INSERT INTO infection_reports (survivor_id, infection_status)
-                VALUES (%s, true)
-            """, (survivor_id,))
+# Define endpoint to update infection status and add infection report
+@app.route('/update_infection_status/<int:survivor_id>', methods=['POST'])
+def update_infection_status(survivor_id):
+    # Check if survivor exists
+    survivor = session.query(Survivor).filter_by(id=survivor_id).first()
+    if not survivor:
+        return jsonify({'error': 'Survivor not found'}), 404
+    
+    # Get number of infection reports for the survivor
+    num_reports = session.query(InfectionReport).filter_by(survivor_id=survivor_id).count()
+    
+    # Update infection status and add infection report if necessary
+    if num_reports >= 3:
+        survivor.infection_status = True
+        session.add(InfectionReport(survivor_id=survivor_id))
+        session.commit()
+        return jsonify({'message': 'Infection status updated and infection report added'}), 200
+    else:
+        return jsonify({'message': 'Infection status not updated'}), 200
 
-            conn.commit()
-
-            logging.info(f"Survivor with ID {survivor_id} flagged as infected")
-            return True  # Survivor flagged as infected
-        else:
-            logging.debug(f"Survivor with ID {survivor_id} not flagged as infected")
-            return False  # Survivor not flagged as infected
-    except (Exception, psycopg2.DatabaseError) as error:
-        logging.error("Error while updating survivor's infection status:", error)
-        logging.debug(f"Infection reports count for survivor {survivor_id}: {infection_reports_count}")
-        conn.rollback()
-        logging.error(f"Error while flagging survivor {survivor_id} as infected: {error}")
-        raise error
-    finally:
-        cursor.close()
-
-@app.route('/flag_infected/<int:survivor_id>', methods=['POST'])
-def flag_infected_endpoint(survivor_id):
-    try:
-        conn = psycopg2.connect(
-            dbname="robotApocalypse",
-            user="postgres",
-            password="postgres",
-            host="localhost",
-            port="5432"
-        )
-        
-        if flag_survivor_as_infected(conn, survivor_id):
-            return make_response(jsonify({'message': 'Survivor not flagged as infected'}), 200)
-        else:
-            return make_response(jsonify({'message': 'Survivor flagged as infected'}), 201)
-        
-    except psycopg2.Error as e:
-        return jsonify({'error': str(e)}), 500
-    finally:
-        conn.close()
-
+# Run Flask application
 if __name__ == '__main__':
+    Base.metadata.create_all(engine)
     app.run(debug=True)
